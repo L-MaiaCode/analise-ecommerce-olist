@@ -1,5 +1,21 @@
 """
+Projeto: Análise de E-commerce Brasileiro - Olist
+Autor: Luca Maia Marques
+Dataset: https://www.kaggle.com/datasets/olistbr/brazilian-ecommerce
 
+Objetivo: 
+    Transformar os dados brutos do dataset em um Star Schema
+    pronto para ser usado no Power BI, em seguida gerar um dashboard
+    que responda perguntas de negócio sobre vendas, logística e satisfação dos clientes.
+
+Estrutura de saída:
+    data/output/
+        fPedidos.csv    -> Tabela fato central
+        dData.csv       -> Dimensão de datas
+        dCliente.csv    -> Dimensão de clientes
+        dProduto.csv    -> imensão de produtos
+        dVendedor.csv   -> Dimensão de vendedores
+        dPagamento.csv  -> Dimensão de pagamentos
 """
 import pandas as pd
 
@@ -43,7 +59,32 @@ for name, df in datasets.items():
     print(f'{name:<25}: {len(df):>8} linhas, {df.shape[1]:>2} colunas, {nulls:>2} valores nulos, {nulls_cols_count:>2} colunas com nulos')
     print(f'{"":<25} -> Colunas afetadas: {nomes_colunas_str}\n')
 
-# -> Dimensão dCliente ----------------------------------
+# -> Dimensão dData ----------------------------------
+print('Criando dData...')
+
+orders['order_purchase_timestamp'] = pd.to_datetime(orders["order_purchase_timestamp"])
+
+datas_unicas = orders["order_purchase_timestamp"].dt.normalize().drop_duplicates().sort_values()
+
+dData = pd.DataFrame({'data_completa': datas_unicas})
+dData['sk_data']    = range(1, len(dData) + 1)
+dData['data']       = dData['data_completa'].dt.date
+dData['ano']        = dData['data_completa'].dt.year
+dData['mes']        = dData['data_completa'].dt.month
+dData['trimestre']  = dData['data_completa'].dt.quarter
+dData['nome_mes']   = dData['data_completa'].dt.strftime('%B')
+dData['semana_ano'] = dData['data_completa'].dt.isocalendar().week.astype(int)
+dData['dia_semana'] = dData['data_completa'].dt.day_name()
+dData['is_fim_semena'] = dData['data_completa'].dt.day_of_week >= 5
+
+dData = dData[['sk_data', 'data', 'ano', 'mes', 'trimestre', 'nome_mes',
+               'semana_ano', 'dia_semana', 'is_fim_semana']]
+
+dData.to_csv('/data/output/dData.csv', index=False)
+
+print(f'dData criada: {len(dData):,} datas únicas')
+
+# -> Dimensão dCliente -------------------------------
 print('Criando dCliente...')
 
 dCliente = customers[[
@@ -171,4 +212,14 @@ dPagamento.to_csv('data/output/dPagamento.csv', index=False)
 
 print(f'dPagamento criada: {len(dPagamento):,} registros de pagamento')
 
-# -> Avaliações por pedido
+# -> dPedidos
+print('Criando fPedidos...')
+
+orders['data_compra'] = orders['order_purchase_timestamp'].dt.normalize()
+dData_lookup = dData.copy()
+dData_lookup['data_completa'] = pd.to_datetime(dData['data'])
+sk_mapa_map = dict(zip(dData_lookup['data_completa'], dData_lookup['sk_data']))
+
+sk_cliente_map = dict(zip(dCliente['customer_id'], dCliente['sk_cliente']))
+
+
